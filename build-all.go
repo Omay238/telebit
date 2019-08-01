@@ -6,9 +6,11 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -77,6 +79,42 @@ func main() {
 		panic(err)
 	}
 	err = f.Sync()
+	if nil != err {
+		panic(err)
+	}
+
+	// Get a copy of all the node modules
+	npmdir := "tmp-package-modules"
+	err = os.RemoveAll(npmdir)
+	if nil != err {
+		panic(err)
+	}
+	err = os.MkdirAll(npmdir, 0755)
+	if nil != err {
+		panic(err)
+	}
+	b, err := ioutil.ReadFile("package.json")
+	if nil != err {
+		panic(err)
+	}
+	err = ioutil.WriteFile(filepath.Join(npmdir, "package.json"), b, 0644)
+	if nil != err {
+		panic(err)
+	}
+	nodeExec, err := exec.LookPath("node")
+	if nil != err {
+		panic(err)
+	}
+	npmExec, err := exec.LookPath("npm")
+	if nil != err {
+		panic(err)
+	}
+	cmd := exec.Command(nodeExec, npmExec, "install")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = npmdir
+	err = cmd.Run()
 	if nil != err {
 		panic(err)
 	}
