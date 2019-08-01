@@ -17,8 +17,10 @@ type pkg struct {
 	os   string
 	arch string
 	ext  string
+	exe  string
 }
 
+// ReaderAtCloser is just what it sounds
 type ReaderAtCloser interface {
 	io.ReaderAt
 	io.Reader
@@ -34,15 +36,17 @@ func main() {
 		"386":     "x86",
 		"armv7":   "armv7l",
 		"armv6":   "armv6l",
-		"armv8":   "arm64",
+		"arm64":   "arm64",
+		//"armv8":   "arm64",
 	}
 
 	pkgs := []pkg{
 		pkg{os: "darwin", arch: "amd64", ext: "tar.gz"},
-		pkg{os: "windows", arch: "amd64", ext: "zip"},
-		pkg{os: "windows", arch: "386", ext: "zip"},
+		pkg{os: "windows", arch: "amd64", ext: "zip", exe: ".exe"},
+		pkg{os: "windows", arch: "386", ext: "zip", exe: ".exe"},
 		pkg{os: "linux", arch: "amd64", ext: "tar.gz"},
-		pkg{os: "linux", arch: "armv8", ext: "tar.gz"},
+		//pkg{os: "linux", arch: "armv8", ext: "tar.gz"},
+		pkg{os: "linux", arch: "arm64", ext: "tar.gz"},
 		pkg{os: "linux", arch: "armv7", ext: "tar.gz"},
 		pkg{os: "linux", arch: "armv6", ext: "tar.gz"},
 	}
@@ -80,9 +84,16 @@ func main() {
 	for i := range pkgs {
 		pkg := pkgs[i]
 
+		arch := pkg.arch
+		if "arm64" == arch {
+			// TODO switch the pathman and serviceman URLs
+			arch = "armv8"
+		}
+		fmt.Printf("\nOS: %s\nArch: %s\n", pkg.os, arch)
+
 		// Create a fresh directory for this telebit release
 		outdir := fmt.Sprintf("telebit-%s-%s-%s", release, pkg.os, pkg.arch)
-		fmt.Printf("Cutting a fresh release for %s\n", outdir)
+		fmt.Printf("(clean) Release:%s\n", outdir)
 		err := os.RemoveAll(outdir)
 		if nil != err {
 			panic(err)
@@ -95,30 +106,10 @@ func main() {
 		npath := fmt.Sprintf("node-v%s-%s-%s", nodev, nos, narch)
 		nfile := fmt.Sprintf("%s.%s", npath, pkg.ext)
 		// TODO check remote filesize anyway as a quick sanity check
-		if _, err := os.Stat(nfile); nil != err {
-			// doesn't exist, go grab it
-			fmt.Printf("Downloading node package %s\n", nfile)
-			nurl := fmt.Sprintf("https://nodejs.org/download/release/v%s/%s", nodev, nfile)
-			resp, err := http.Get(nurl)
-			if nil != err {
-				panic(err)
-			}
-			if resp.StatusCode >= 300 || resp.StatusCode < 200 {
-				log.Fatal("Bad deal on node download:", resp.Status)
-			}
-			defer resp.Body.Close()
-
-			// Stream it in locally
-			fmt.Printf("Streaming node package %s\n", nfile)
-			nf, err := os.OpenFile(nfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
-			_, err = io.Copy(nf, resp.Body)
-			if nil != err {
-				panic(err)
-			}
-			err = nf.Sync()
-			if nil != err {
-				panic(err)
-			}
+		nurl := fmt.Sprintf("https://nodejs.org/download/release/v%s/%s", nodev, nfile)
+		err = download("node package", nurl, nfile)
+		if nil != err {
+			panic(err)
 		}
 
 		// lay down the node directory first
@@ -149,7 +140,7 @@ func main() {
 				panic(err)
 			}
 		default:
-			panic(fmt.Errorf("Liar!!"))
+			panic(fmt.Errorf("%s", "Liar!!"))
 		}
 
 		// TODO how to handle node modules?
@@ -169,9 +160,58 @@ func main() {
 		if err := unzip(z, s.Size(), outdir, strip); nil != err {
 			panic(err)
 		}
+
+		// Get pathman for the platform
+		pathmanURL := fmt.Sprintf(
+			"https://rootprojects.org/pathman/dist/%s/%s/pathman"+pkg.exe,
+			pkg.os,
+			arch,
+		)
+		pathmanFile := filepath.Join(outdir, "bin", "pathman") + pkg.exe
+		err = download("pathman", pathmanURL, pathmanFile)
+		if nil != err {
+			panic(err)
+		}
+
+		// Get serviceman for the platform
+		servicemanURL := fmt.Sprintf(
+			"https://rootprojects.org/serviceman/dist/%s/%s/serviceman"+pkg.exe,
+			pkg.os,
+			arch,
+		)
+		servicemanFile := filepath.Join(outdir, "bin", "serviceman") + pkg.exe
+		err = download("serviceman", servicemanURL, servicemanFile)
+		if nil != err {
+			panic(err)
+		}
 	}
 
 	fmt.Printf("Done.\n")
+}
+
+func download(title string, nurl string, nfile string) error {
+	if _, err := os.Stat(nfile); nil == err {
+		return nil
+	}
+	// doesn't exist, go grab it
+	fmt.Printf("Downloading %s to %s\n", nurl, nfile)
+	resp, err := http.Get(nurl)
+	if nil != err {
+		return err
+	}
+	if resp.StatusCode >= 300 || resp.StatusCode < 200 {
+		log.Fatal("Bad deal on download:", resp.Status)
+	}
+	defer resp.Body.Close()
+
+	// Stream it in locally
+	fmt.Printf("Streaming %s to %s\n", nurl, nfile)
+	nf, err := os.OpenFile(nfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	_, err = io.Copy(nf, resp.Body)
+	if nil != err {
+		return err
+	}
+	return nf.Sync()
 }
 
 func untar(tgz io.Reader, outdir string, strip int) error {
