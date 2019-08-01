@@ -107,7 +107,7 @@ func main() {
 		nfile := fmt.Sprintf("%s.%s", npath, pkg.ext)
 		// TODO check remote filesize anyway as a quick sanity check
 		nurl := fmt.Sprintf("https://nodejs.org/download/release/v%s/%s", nodev, nfile)
-		err = download("node package", nurl, nfile)
+		err = download("node package", nurl, nfile, false)
 		if nil != err {
 			panic(err)
 		}
@@ -168,7 +168,7 @@ func main() {
 			arch,
 		)
 		pathmanFile := filepath.Join(outdir, "bin", "pathman") + pkg.exe
-		err = download("pathman", pathmanURL, pathmanFile)
+		err = download("pathman", pathmanURL, pathmanFile, true)
 		if nil != err {
 			panic(err)
 		}
@@ -180,7 +180,7 @@ func main() {
 			arch,
 		)
 		servicemanFile := filepath.Join(outdir, "bin", "serviceman") + pkg.exe
-		err = download("serviceman", servicemanURL, servicemanFile)
+		err = download("serviceman", servicemanURL, servicemanFile, true)
 		if nil != err {
 			panic(err)
 		}
@@ -189,7 +189,7 @@ func main() {
 	fmt.Printf("Done.\n")
 }
 
-func download(title string, nurl string, nfile string) error {
+func download(title string, nurl string, nfile string, exec bool) error {
 	if _, err := os.Stat(nfile); nil == err {
 		return nil
 	}
@@ -206,7 +206,11 @@ func download(title string, nurl string, nfile string) error {
 
 	// Stream it in locally
 	fmt.Printf("Streaming %s to %s\n", nurl, nfile)
-	nf, err := os.OpenFile(nfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	fmode := os.FileMode(0644)
+	if exec {
+		fmode = os.FileMode(0755)
+	}
+	nf, err := os.OpenFile(nfile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fmode)
 	_, err = io.Copy(nf, resp.Body)
 	if nil != err {
 		return err
