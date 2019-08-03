@@ -209,8 +209,6 @@ func main() {
 			panic(err)
 		}
 
-		// TODO we'll use this when tar-ing
-		//tzw := gzip.NewWriter(tw)
 		pr, pw := io.Pipe()
 		go func() {
 			tw := tar.NewWriter(pw)
@@ -255,6 +253,44 @@ func main() {
 		if nil != err {
 			panic(err)
 		}
+
+		// Write out the tar
+		f, err := os.OpenFile(outdir+".tar.gz", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		defer f.Close()
+		if nil != err {
+			panic(err)
+		}
+		zw := gzip.NewWriter(f)
+		defer zw.Close()
+		tw := tar.NewWriter(zw)
+		defer tw.Close()
+
+		//fis, err := ioutil.ReadDir(npmdir)
+		fi, err := os.Stat(npmdir)
+		if nil != err {
+			panic("stat:" + err.Error())
+		}
+		//err = tarDir(tw, npmdir, fis, "")
+		err = tarEntry(tw, "", fi, "")
+		if nil != err {
+			panic("tarError:" + err.Error())
+		}
+
+		// Explicitly close in the correct order
+		err = tw.Close()
+		if nil != err {
+			panic(err)
+		}
+		err = zw.Close()
+		if nil != err {
+			panic(err)
+		}
+		err = f.Close()
+		if nil != err {
+			panic(err)
+		}
+		fmt.Println("wrote", outdir+".tar.gz")
+
 	}
 
 	fmt.Printf("Done.\n")
