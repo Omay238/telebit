@@ -85,6 +85,7 @@ func main() {
 
 	// Get a copy of all the node modules
 	npmdir := "tmp-package-modules"
+	// TODO save bits /*
 	err = os.RemoveAll(npmdir)
 	if nil != err {
 		panic(err)
@@ -118,6 +119,7 @@ func main() {
 	if nil != err {
 		panic(err)
 	}
+	//*/
 
 	for i := range pkgs {
 		pkg := pkgs[i]
@@ -168,15 +170,23 @@ func main() {
 				panic(err)
 			}
 		case "tar.gz":
+			// SAVE ON BITS /*
 			tgz, err := os.Open(nfile)
 			if nil != err {
 				panic(err)
 			}
-			strip := 1
-			err = untar(tgz, outdir, strip)
+			defer tgz.Close()
+			tarfile, err := gzip.NewReader(tgz)
 			if nil != err {
 				panic(err)
 			}
+			// TODOD XXX turn back on
+			strip := 1
+			err = untar(tarfile, outdir, strip)
+			if nil != err {
+				panic(err)
+			}
+			//*/
 		default:
 			panic(fmt.Errorf("%s", "Liar!!"))
 		}
@@ -197,6 +207,29 @@ func main() {
 		strip := 1
 		if err := unzip(z, s.Size(), outdir, strip); nil != err {
 			panic(err)
+		}
+
+		// TODO we'll use this when tar-ing
+		//tzw := gzip.NewWriter(tw)
+		pr, pw := io.Pipe()
+		go func() {
+			tw := tar.NewWriter(pw)
+			defer tw.Close()
+			//fis, err := ioutil.ReadDir(npmdir)
+			fi, err := os.Stat(npmdir)
+			if nil != err {
+				panic("stat:" + err.Error())
+			}
+			//err = tarDir(tw, npmdir, fis, "")
+			err = tarEntry(tw, "", fi, "")
+			if nil != err {
+				panic("tarError:" + err.Error())
+			}
+		}()
+
+		err = untar(pr, outdir, 1)
+		if nil != err {
+			panic("untarError:" + err.Error())
 		}
 
 		// Get pathman for the platform
@@ -256,12 +289,7 @@ func download(title string, nurl string, nfile string, exec bool) error {
 	return nf.Sync()
 }
 
-func untar(tgz io.Reader, outdir string, strip int) error {
-	t, err := gzip.NewReader(tgz)
-	if nil != err {
-		return err
-	}
-	defer t.Close()
+func untar(t io.Reader, outdir string, strip int) error {
 	tr := tar.NewReader(t)
 	for {
 		header, err := tr.Next()
@@ -278,6 +306,7 @@ func untar(tgz io.Reader, outdir string, strip int) error {
 		case tar.TypeLink:
 			// ignore hard links
 		case tar.TypeSymlink:
+			//fmt.Println("untarSym:", fpath)
 			// Note: the link itself is always a file, even when it represents a directory
 			lpath := filepath.Join(filepath.Dir(fpath), header.Linkname)
 			if !strings.HasPrefix(lpath+string(os.PathSeparator), outdir+string(os.PathSeparator)) {
@@ -287,6 +316,13 @@ func untar(tgz io.Reader, outdir string, strip int) error {
 				return err
 			}
 		case tar.TypeDir:
+			//fmt.Println("untarDir:", fpath)
+			/*
+				// TODO
+				if err := os.Lchown(dst); err != nil {
+					return err
+				}
+			*/
 			// gonna use the same perms as were set previously here
 			// should be fine (i.e. we want 755 for execs on *nix)
 			_, err := safeOpen(header.FileInfo(), os.FileMode(header.Mode), fpath, outdir)
@@ -294,6 +330,13 @@ func untar(tgz io.Reader, outdir string, strip int) error {
 				return err
 			}
 		case tar.TypeReg:
+			//fmt.Println("untarReg:", fpath)
+			/*
+				// TODO
+				if err := os.Lchown(dst); err != nil {
+					return err
+				}
+			*/
 			// gonna use the same perms as were set previously here
 			// should be fine (i.e. we want 755 for execs on *nix)
 			out, err := safeOpen(header.FileInfo(), os.FileMode(header.Mode), fpath, outdir)
@@ -409,9 +452,104 @@ func safeOpen(fi os.FileInfo, fm os.FileMode, fpath string, outdir string) (io.W
 	}
 
 	out, err := os.OpenFile(fpath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, fm)
-	if err != nil {
+	if nil != err {
 		return nil, err
 	}
 
 	return out, nil
+}
+
+// simpler to tar and untar than to have separate code to copy and to tar
+func tarDir(tw *tar.Writer, src string, fis []os.FileInfo, trim string) error {
+	//fmt.Println("tarDir:", src)
+	for i := range fis {
+		fi := fis[i]
+
+		//fmt.Println("tarEntry:", src)
+		if err := tarEntry(tw, src, fi, trim); nil != err {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func tarEntry(tw *tar.Writer, src string, fi os.FileInfo, trim string) error {
+	// gotta get perms
+	/*
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok {
+			return fmt.Errorf("syscall failed for %q", src)
+		}
+		// TODO uid, username
+		Uid: int(stat.Uid),
+		Gid: int(stat.Gid),
+	*/
+
+	src = filepath.Join(src, fi.Name())
+	h := &tar.Header{
+		Name:    strings.TrimPrefix(strings.TrimPrefix(src, trim), "/"),
+		Mode:    int64(fi.Mode()),
+		ModTime: fi.ModTime(),
+	}
+	//fmt.Printf("tarHeader: %s %s\n", src, h.Name)
+
+	switch fi.Mode() & os.ModeType {
+	case os.ModeSymlink:
+		//fmt.Println("tarSym:", src)
+		// TODO make sure that this is within the directory
+		targetpath, err := os.Readlink(src)
+		if nil != err {
+			return err
+		}
+		h.Linkname = targetpath
+
+		err = tw.WriteHeader(h)
+		if nil != err {
+			return err
+		}
+
+		// return to skip chmod
+		return nil
+	case os.ModeDir:
+		// directories must end in / for tar
+		h.Name = strings.TrimPrefix(h.Name+"/", "/")
+		//fmt.Printf("tarIsDir: %q %q\n", src, h.Name)
+		if "" != h.Name {
+			if err := tw.WriteHeader(h); nil != err {
+				return err
+			}
+		}
+
+		//fmt.Println("tarReadDir:", src)
+		fis, err := ioutil.ReadDir(src)
+		if nil != err {
+			return err
+		}
+
+		return tarDir(tw, src, fis, trim)
+	default:
+		//fmt.Println("tarDefault:", src)
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("Unsupported file type: %s", src)
+		}
+
+		h.Size = fi.Size()
+		err := tw.WriteHeader(h)
+		if nil != err {
+			return err
+		}
+
+		r, err := os.Open(src)
+		defer r.Close()
+		if nil != err {
+			return err
+		}
+
+		if _, err := io.Copy(tw, r); nil != err {
+			return err
+		}
+	}
+
+	return nil
 }
