@@ -1,5 +1,0 @@
-#agree_tos: true                 # agree to the Telebit, Greenlock, and Let's Encrypt TOSes
-community_member: true          # receive infrequent relevant updates
-telemetry: true                 # contribute to project telemetric data
-newsletter: false               # contribute to project telemetric data
-ssh_auto: false                 # forward ssh-looking packets, from any connection, to port 22
