@@ -254,42 +254,57 @@ func main() {
 			panic(err)
 		}
 
-		// Write out the tar
-		f, err := os.OpenFile(outdir+".tar.gz", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+		// Write out the packaged deliverable
+		f, err := os.OpenFile(outdir+"."+pkg.ext, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 		defer f.Close()
 		if nil != err {
 			panic(err)
 		}
-		zw := gzip.NewWriter(f)
-		defer zw.Close()
-		tw := tar.NewWriter(zw)
-		defer tw.Close()
 
 		//fis, err := ioutil.ReadDir(npmdir)
 		fi, err := os.Stat(npmdir)
 		if nil != err {
 			panic("stat:" + err.Error())
 		}
-		//err = tarDir(tw, npmdir, fis, "")
-		err = tarEntry(tw, "", fi, "")
-		if nil != err {
-			panic("tarError:" + err.Error())
+
+		switch pkg.ext {
+		case "zip":
+			err = Zip(f, outdir, "")
+			if nil != err {
+				panic("tarError:" + err.Error())
+			}
+		case "tar.gz":
+			// Write out the tar
+
+			zw := gzip.NewWriter(f)
+			defer zw.Close()
+			tw := tar.NewWriter(zw)
+			defer tw.Close()
+
+			//err = tarDir(tw, npmdir, fis, "")
+			err = tarEntry(tw, "", fi, npmdir)
+			if nil != err {
+				panic("tarError:" + err.Error())
+			}
+
+			// Explicitly close in the correct order
+			err = tw.Close()
+			if nil != err {
+				panic(err)
+			}
+			err = zw.Close()
+			if nil != err {
+				panic(err)
+			}
+		default:
+			panic(fmt.Errorf("%s", "Liar!!"))
 		}
 
-		// Explicitly close in the correct order
-		err = tw.Close()
-		if nil != err {
-			panic(err)
-		}
-		err = zw.Close()
-		if nil != err {
-			panic(err)
-		}
 		err = f.Close()
 		if nil != err {
 			panic(err)
 		}
-		fmt.Println("wrote", outdir+".tar.gz")
+		fmt.Println("wrote", outdir+"."+pkg.ext)
 
 	}
 
@@ -523,12 +538,7 @@ func tarEntry(tw *tar.Writer, src string, fi os.FileInfo, trim string) error {
 	*/
 
 	src = filepath.Join(src, fi.Name())
-	h := &tar.Header{
-		Name:    strings.TrimPrefix(strings.TrimPrefix(src, trim), "/"),
-		Mode:    int64(fi.Mode()),
-		ModTime: fi.ModTime(),
-	}
-	//fmt.Printf("tarHeader: %s %s\n", src, h.Name)
+	entryName := strings.TrimPrefix(strings.TrimPrefix(src, trim), "/")
 
 	switch fi.Mode() & os.ModeType {
 	case os.ModeSymlink:
@@ -538,7 +548,12 @@ func tarEntry(tw *tar.Writer, src string, fi os.FileInfo, trim string) error {
 		if nil != err {
 			return err
 		}
-		h.Linkname = targetpath
+
+		h, err := tar.FileInfoHeader(fi, targetpath)
+		if nil != err {
+			return err
+		}
+		h.Name = entryName
 
 		err = tw.WriteHeader(h)
 		if nil != err {
@@ -548,8 +563,14 @@ func tarEntry(tw *tar.Writer, src string, fi os.FileInfo, trim string) error {
 		// return to skip chmod
 		return nil
 	case os.ModeDir:
-		// directories must end in / for tar
+		// directories must end in / for go
+		h, err := tar.FileInfoHeader(fi, "")
+		if nil != err {
+			return err
+		}
+		h.Name = entryName
 		h.Name = strings.TrimPrefix(h.Name+"/", "/")
+
 		//fmt.Printf("tarIsDir: %q %q\n", src, h.Name)
 		if "" != h.Name {
 			if err := tw.WriteHeader(h); nil != err {
@@ -570,9 +591,12 @@ func tarEntry(tw *tar.Writer, src string, fi os.FileInfo, trim string) error {
 			return fmt.Errorf("Unsupported file type: %s", src)
 		}
 
-		h.Size = fi.Size()
-		err := tw.WriteHeader(h)
+		h, err := tar.FileInfoHeader(fi, "")
 		if nil != err {
+			return err
+		}
+		h.Name = entryName
+		if err := tw.WriteHeader(h); nil != err {
 			return err
 		}
 
@@ -585,6 +609,109 @@ func tarEntry(tw *tar.Writer, src string, fi os.FileInfo, trim string) error {
 		if _, err := io.Copy(tw, r); nil != err {
 			return err
 		}
+	}
+
+	return nil
+}
+
+// Zip walks `src`, omitting `trim`, writing to `w`
+func Zip(w io.Writer, src string, trim string) error {
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	return filepath.Walk(src, func(path string, fi os.FileInfo, err error) error {
+		// path includes fi.Name() already
+		if nil != err {
+			fmt.Println("warning: skipped", path+": ", err)
+			return nil
+		}
+
+		zipOne(zw, path, fi, trim)
+		return nil
+	})
+}
+
+func zipOne(zw *zip.Writer, path string, fi os.FileInfo, trim string) error {
+	h, err := zip.FileInfoHeader(fi)
+	if nil != err {
+		return err
+	}
+	h.Name = strings.TrimPrefix(strings.TrimPrefix(path, trim), string(filepath.Separator))
+
+	if fi.IsDir() {
+		//fmt.Printf("directory: %s\n\t%q\n", path, h.Name)
+		return zipDirectory(zw, h)
+	}
+
+	// Allow zipping a single file
+	if "" == h.Name {
+		h.Name = path
+	}
+	if fi.Mode().IsRegular() {
+		//fmt.Printf("file: %s\n\t%q\n", path, h.Name)
+		return zipFile(zw, h, path)
+	}
+
+	if os.ModeSymlink == (fi.Mode() & os.ModeType) {
+		//fmt.Printf("symlink: %s\n\t%q\n", path, h.Name)
+		return zipSymlink(zw, h, path)
+	}
+
+	fmt.Fprintf(os.Stderr, "skipping: %s\n\t(irregular file type)\n", path)
+	return nil
+}
+
+func zipDirectory(zw *zip.Writer, h *zip.FileHeader) error {
+	// directories must end in / for go
+	h.Name = strings.TrimPrefix(h.Name+"/", "/")
+
+	// skip top-level, trimmed directory
+	if "" == h.Name {
+		return nil
+	}
+
+	if _, err := zw.CreateHeader(h); nil != err {
+		return err
+	}
+
+	return nil
+}
+
+func zipFile(zw *zip.Writer, h *zip.FileHeader, path string) error {
+	r, err := os.Open(path)
+	if nil != err {
+		return err
+	}
+	defer r.Close()
+
+	// Files should be zipped (not dirs, and symlinks... meh)
+	// TODO investigate if files below a certain size shouldn't be deflated
+	h.Method = zip.Deflate
+	w, err := zw.CreateHeader(h)
+	if nil != err {
+		return err
+	}
+
+	if _, err := io.Copy(w, r); nil != err {
+		return err
+	}
+
+	return nil
+}
+
+func zipSymlink(zw *zip.Writer, h *zip.FileHeader, path string) error {
+	w, err := zw.CreateHeader(h)
+	if nil != err {
+		return err
+	}
+
+	// TODO make sure that this is within the root directory
+	targetpath, err := os.Readlink(path)
+	if nil != err {
+		return err
+	}
+	if _, err := w.Write([]byte(targetpath)); nil != err {
+		return err
 	}
 
 	return nil
