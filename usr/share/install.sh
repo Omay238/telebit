@@ -156,6 +156,7 @@ detect_unarchiver()
       _my_unarchive_out="-d"
       archive_ext="zip"
     else
+      # TODO ping bug report url
       echo "Developer error: '$my_unarchiver' isn't a supported. The developer made a typo."
       return 20
     fi
@@ -241,6 +242,7 @@ t_arch=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELE
 t_url=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 8)
 
 if [ -z "$t_url" ]; then
+  # TODO ping bug report url
   echo "No matching version for '$TELEBIT_RELEASE' for '$TELEBIT_OS' on '$TELEBIT_ARCH'"
   exit 2
 fi
@@ -301,5 +303,5 @@ echo ""
 echo ""
 echo "Open a new terminal and run the following:"
 echo ""
-printf "\ttelebit init"
+printf "\ttelebit init\n"
 echo ""
