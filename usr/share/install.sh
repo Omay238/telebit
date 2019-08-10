@@ -217,8 +217,50 @@ echo "Downloading the Telebit installer for your system..."
 sleep 0.5
 echo ""
 
-if [ -e "usr/share/install_helper.sh" ]; then
-  bash usr/share/install_helper.sh "$@"
-else
-  http_bash https://git.coolaj86.com/coolaj86/telebit.js/raw/branch/$TELEBIT_VERSION/usr/share/install_helper.sh "$@"
+#if [ -e "usr/share/install_helper.sh" ]; then
+#  bash usr/share/install_helper.sh "$@"
+#else
+#  http_bash https://git.coolaj86.com/coolaj86/telebit.js/raw/branch/$TELEBIT_VERSION/usr/share/install_helper.sh "$@"
+#fi
+
+mkdir -p $HOME/Downloads
+my_tmp="$(mktemp -d -t telebit.XXXX)"
+
+http_get "https://rootprojects.org/telebit/dist/index.tab" "$my_tmp/index.tab"
+meta=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1)
+latest=$(echo "$meta" | cut -f 1)
+major=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 2)
+size=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 3)
+t_sha256=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 4)
+t_channel=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 5)
+t_os=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 6)
+t_arch=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 7)
+t_url=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 8)
+
+my_dir="telebit-$latest-$TELEBIT_OS-$TELEBIT_ARCH"
+my_file="$my_dir.$archive_ext"
+if [ -f "$HOME/Downloads/$my_file" ]; then
+  my_size=$(($(wc -c < "$HOME/Downloads/$my_file")))
+  if [ "$my_size" -eq "$size" ]; then
+    echo "File exists in ~/Downloads, skipping download"
+  else
+    echo "Removing corrupt download '~/Downloads/$my_file'"
+    rm -f "$HOME/Downloads/$my_file"
+  fi
 fi
+
+if [ ! -f "$HOME/Downloads/$my_file" ]; then
+  #echo "Downloading from https://rootprojects.org/telebit/dist/$major/$my_file ..."
+  echo "Downloading from $t_url ..."
+  sleep 0.3
+  #http_get "https://rootprojects.org/telebit/dist/$major/$my_file" "$HOME/Downloads/$my_file"
+  http_get "$t_url" "$HOME/Downloads/$my_file"
+  echo "Saved to '$HOME/Downloads/$my_file' ..."
+  echo ""
+  sleep 0.3
+fi
+
+echo "Unpacking and installing Telebit ..."
+echo unarchiver $my_file $my_tmp
+echo pushd $my_tmp/$my_dir
+echo bash ./setup.sh
