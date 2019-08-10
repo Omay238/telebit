@@ -262,7 +262,7 @@ func main() {
 		}
 
 		//fis, err := ioutil.ReadDir(npmdir)
-		fi, err := os.Stat(npmdir)
+		fi, err := os.Stat(outdir)
 		if nil != err {
 			panic("stat:" + err.Error())
 		}
@@ -271,7 +271,7 @@ func main() {
 		case "zip":
 			err = Zip(f, outdir, "")
 			if nil != err {
-				panic("tarError:" + err.Error())
+				panic("zipError:" + err.Error())
 			}
 		case "tar.gz":
 			// Write out the tar
@@ -281,8 +281,9 @@ func main() {
 			tw := tar.NewWriter(zw)
 			defer tw.Close()
 
-			//err = tarDir(tw, npmdir, fis, "")
-			err = tarEntry(tw, "", fi, npmdir)
+			// TODO create Tar() in go-examples
+			//err = tarDir(tw, outdir, fis, "")
+			err = tarEntry(tw, "", fi, outdir)
 			if nil != err {
 				panic("tarError:" + err.Error())
 			}
