@@ -242,10 +242,14 @@ my_file="$my_dir.$archive_ext"
 if [ -f "$HOME/Downloads/$my_file" ]; then
   my_size=$(($(wc -c < "$HOME/Downloads/$my_file")))
   if [ "$my_size" -eq "$size" ]; then
-    echo "File exists in ~/Downloads, skipping download"
+    echo "~/Downloads/ exists, skipping download"
   else
     echo "Removing corrupt download '~/Downloads/$my_file'"
-    rm -f "$HOME/Downloads/$my_file"
+    # change into $HOME because we don't ever want to perform
+    # a destructive action on a variable we didn't set
+    pushd "$HOME"
+      rm -f "Downloads/$my_file"
+    popd
   fi
 fi
 
@@ -261,6 +265,33 @@ if [ ! -f "$HOME/Downloads/$my_file" ]; then
 fi
 
 echo "Unpacking and installing Telebit ..."
-echo unarchiver $my_file $my_tmp
-echo pushd $my_tmp/$my_dir
-echo bash ./setup.sh
+unarchiver "$HOME/Downloads/$my_file" "$my_tmp"
+echo "extracting '$my_file' to '$my_tmp'"
+
+# make sure that telebit is not in use
+pushd "$my_tmp" > /dev/null
+  ./bin/node ./bin/npm --scripts-prepend-node-path=true run preinstall
+popd > /dev/null
+
+# move only once there are not likely to be any open files
+# (especially important on windows)
+pushd "$HOME" > /dev/null
+  if [ -e ".local/opt/telebit" ]; then
+    mv ".local/opt/telebit" ".local/opt/telebit-old-$(date "+%s")"
+  fi
+  mv "$my_tmp" ".local/opt/telebit"
+popd > /dev/null
+
+# make sure that telebit is not in use
+pushd "$HOME/.local/opt/telebit" > /dev/null
+  ./node_modules/.bin/pathman add "$HOME/.local/opt/telebit/bin-public" > /dev/null
+  ./bin/node ./bin/npm --scripts-prepend-node-path=true run postinstall
+popd > /dev/null
+
+echo ""
+echo ""
+echo ""
+echo "Open a new terminal and run the following:"
+echo ""
+printf "\ttelebit init"
+echo ""
