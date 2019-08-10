@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+"$(dirname $(dirname $0))/bin/node" "$(dirname $(dirname $0))/bin/telebit.js" "$@"
+exit $?

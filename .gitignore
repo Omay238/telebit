@@ -1,3 +1,7 @@
+*.tar.gz
+*.zip
+telebit-stable-*
+
 node_modules.*
 *.*.sw*
 etc/acme/
