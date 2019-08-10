@@ -22,7 +22,11 @@ function run(bin, args) {
 			out += txt;
 		});
 		runner.on('exit', function(code) {
-			if (0 !== code && !/service matching/.test(out)) {
+			if (
+				0 !== code &&
+				!/service matching/.test(out) &&
+				!/no pid file/.test(out)
+			) {
 				console.error(out);
 				reject(
 					new Error("exited with non-zero status code '" + code + "'")

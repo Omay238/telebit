@@ -217,9 +217,9 @@ echo "    Download Type:     $archive_ext"
 echo "    Release Channel:   $TELEBIT_VERSION"
 echo ""
 sleep 0.3
-echo "Downloading the Telebit installer for your system..."
-sleep 0.5
-echo ""
+#echo "Downloading the Telebit installer for your system..."
+#sleep 0.5
+#echo ""
 
 #if [ -e "usr/share/install_helper.sh" ]; then
 #  bash usr/share/install_helper.sh "$@"
@@ -253,6 +253,7 @@ if [ -f "$HOME/Downloads/$my_file" ]; then
   my_size=$(($(wc -c < "$HOME/Downloads/$my_file")))
   if [ "$my_size" -eq "$size" ]; then
     echo "~/Downloads/$my_file exists, skipping download"
+    sleep 0.5
   else
     echo "Removing incomplete download '~/Downloads/$my_file'"
     # change into $HOME because we don't ever want to perform
@@ -311,7 +312,12 @@ export PATH="$HOME/.local/opt/telebit/bin/:$OLD_PATH"
 
 # make sure that telebit is not in use
 pushd "$HOME/.local/opt/telebit" > /dev/null
-  ./node_modules/.bin/pathman add "$HOME/.local/opt/telebit/bin-public" > /dev/null
+  if [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]]; then
+    ./node_modules/.bin/pathman add '%USERPROFILE%\.local\opt\telebit\bin-public' > /dev/null &
+    sleep 0.1 # workaround for pathman not exiting as it should on Windows
+  else
+    ./node_modules/.bin/pathman add "$HOME/.local/opt/telebit/bin-public" > /dev/null
+  fi
   ./bin/npm --scripts-prepend-node-path=true run postinstall
 popd > /dev/null
 
