@@ -39,6 +39,7 @@ run('serviceman', [
 	'--rdns',
 	'io.telebit.remote.telebit',
 	path.resolve(__dirname, '..', 'bin', 'telebit.js'),
+	'--',
 	'daemon',
 	'--config',
 	path.join(os.homedir(), '.config/telebit/telebitd.yml')
