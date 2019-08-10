@@ -252,14 +252,14 @@ my_file="$my_dir.$archive_ext"
 if [ -f "$HOME/Downloads/$my_file" ]; then
   my_size=$(($(wc -c < "$HOME/Downloads/$my_file")))
   if [ "$my_size" -eq "$size" ]; then
-    echo "~/Downloads/ exists, skipping download"
+    echo "~/Downloads/$my_file exists, skipping download"
   else
-    echo "Removing corrupt download '~/Downloads/$my_file'"
+    echo "Removing incomplete download '~/Downloads/$my_file'"
     # change into $HOME because we don't ever want to perform
     # a destructive action on a variable we didn't set
-    pushd "$HOME"
+    pushd "$HOME" > /dev/null
       rm -f "Downloads/$my_file"
-    popd
+    popd > /dev/null
   fi
 fi
 
@@ -275,12 +275,25 @@ if [ ! -f "$HOME/Downloads/$my_file" ]; then
 fi
 
 echo "Unpacking and installing Telebit ..."
+echo ""
 unarchiver "$HOME/Downloads/$my_file" "$my_tmp"
-echo "extracting '$my_file' to '$my_tmp'"
+# because unzip can't strip a prfeix
+pushd "$my_tmp" > /dev/null
+  if [ -d ./telebit-* ]; then
+      mv ./telebit-*/* "./"
+      rm -rf ./telebit-*
+  fi
+popd > /dev/null
+echo "Extracted '$my_file' to '$my_tmp'"
+
+# On linux npm is a javascript file, but on Windows (Git Bash) it's both sh and cmd,
+# so we need to make sure *this* node is first in the path for this script
+OLD_PATH="$PATH"
+export PATH="$my_tmp/bin/:$OLD_PATH"
 
 # make sure that telebit is not in use
 pushd "$my_tmp" > /dev/null
-  ./bin/node ./bin/npm --scripts-prepend-node-path=true run preinstall
+  ./bin/npm --scripts-prepend-node-path=true run preinstall
 popd > /dev/null
 
 # move only once there are not likely to be any open files
@@ -292,10 +305,14 @@ pushd "$HOME" > /dev/null
   mv "$my_tmp" ".local/opt/telebit"
 popd > /dev/null
 
+# On linux npm is a javascript file, but on Windows (Git Bash) it's both sh and cmd,
+# so we need to make sure *this* node is first in the path for this script
+export PATH="$HOME/.local/opt/telebit/bin/:$OLD_PATH"
+
 # make sure that telebit is not in use
 pushd "$HOME/.local/opt/telebit" > /dev/null
   ./node_modules/.bin/pathman add "$HOME/.local/opt/telebit/bin-public" > /dev/null
-  ./bin/node ./bin/npm --scripts-prepend-node-path=true run postinstall
+  ./bin/npm --scripts-prepend-node-path=true run postinstall
 popd > /dev/null
 
 echo ""
