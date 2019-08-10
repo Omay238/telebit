@@ -236,10 +236,21 @@ func main() {
 			pkg.os,
 			arch,
 		)
-		pathmanFile := filepath.Join(outdir, "bin", "pathman") + pkg.exe
+		pathmanFile := filepath.Join(outdir, "node_modules/.bin", "pathman") + pkg.exe
 		err = download("pathman", pathmanURL, pathmanFile, true)
 		if nil != err {
 			panic(err)
+		}
+		if ".exe" == pkg.exe {
+			sh := strings.Join([]string{
+				`#!/usr/bin/env bash`,
+				`"$(dirname "$0")/pathman.exe" "$@"`,
+				`exit $?`,
+			}, "\n")
+			script := filepath.Join(outdir, "node_modules/.bin", "pathman")
+			if err := ioutil.WriteFile(script, []byte(sh), 0755); nil != err {
+				panic(err)
+			}
 		}
 
 		// Get serviceman for the platform
@@ -248,10 +259,21 @@ func main() {
 			pkg.os,
 			arch,
 		)
-		servicemanFile := filepath.Join(outdir, "bin", "serviceman") + pkg.exe
+		servicemanFile := filepath.Join(outdir, "node_modules/.bin", "serviceman") + pkg.exe
 		err = download("serviceman", servicemanURL, servicemanFile, true)
 		if nil != err {
 			panic(err)
+		}
+		if ".exe" == pkg.exe {
+			sh := strings.Join([]string{
+				`#!/usr/bin/env bash`,
+				`"$(dirname "$0")/serviceman.exe" "$@"`,
+				`exit $?`,
+			}, "\n")
+			script := filepath.Join(outdir, "node_modules/.bin", "serviceman")
+			if err := ioutil.WriteFile(script, []byte(sh), 0755); nil != err {
+				panic(err)
+			}
 		}
 
 		// Write out the packaged deliverable
