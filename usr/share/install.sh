@@ -145,16 +145,19 @@ detect_unarchiver()
 {
   set +e
   if type -p "$my_unarchiver" >/dev/null 2>&1; then
-    if type -p tar >/dev/null 2>&1; then
+    if [ "tar" == "$my_unarchiver" ]; then
       _my_unarchiver="tar"
       _my_unarchive_opts="-xf"
       _my_unarchive_out="-C"
       archive_ext="tar.gz"
-    elif type -p unzip >/dev/null 2>&1; then
+    elif [ "unzip" == "$my_unarchiver" ]; then
       _my_unarchiver="unzip"
       _my_unarchive_opts="-qq"
       _my_unarchive_out="-d"
       archive_ext="zip"
+    else
+      echo "Developer error: '$my_unarchiver' isn't a supported. The developer made a typo."
+      return 20
     fi
   else
     echo "Failed to find '$my_unarchiver' which is needed to unpack downloaded files."
@@ -236,6 +239,11 @@ t_channel=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $T
 t_os=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 6)
 t_arch=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 7)
 t_url=$(grep $TELEBIT_RELEASE $my_tmp/index.tab | grep $TELEBIT_OS | grep $TELEBIT_ARCH | head -n 1 | cut -f 8)
+
+if [ -z "$t_url" ]; then
+  echo "No matching version for '$TELEBIT_RELEASE' for '$TELEBIT_OS' on '$TELEBIT_ARCH'"
+  exit 2
+fi
 
 my_dir="telebit-$latest-$TELEBIT_OS-$TELEBIT_ARCH"
 my_file="$my_dir.$archive_ext"
