@@ -165,7 +165,22 @@ func main() {
 				panic(err)
 			}
 			strip := 1
-			err = unzip(z, s.Size(), outdir, strip)
+			if "windows" == pkg.os {
+				// re-nest into "bin" for consistency
+				err = unzip(z, s.Size(), filepath.Join(outdir, "bin"), strip)
+				// handle the special case of git bash
+				sh := strings.Join([]string{
+					`#!/usr/bin/env bash`,
+					`"$(dirname "$0")/node.exe" "$@"`,
+					`exit $?`,
+				}, "\n")
+				script := filepath.Join(outdir, "bin", "node")
+				if err := ioutil.WriteFile(script, []byte(sh), 0755); nil != err {
+					panic(err)
+				}
+			} else {
+				err = unzip(z, s.Size(), outdir, strip)
+			}
 			if nil != err {
 				panic(err)
 			}
