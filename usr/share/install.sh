@@ -303,6 +303,7 @@ pushd "$HOME" > /dev/null
   if [ -e ".local/opt/telebit" ]; then
     mv ".local/opt/telebit" ".local/opt/telebit-old-$(date "+%s")"
   fi
+  mkdir -p .local/opt
   mv "$my_tmp" ".local/opt/telebit"
 popd > /dev/null
 
